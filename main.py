@@ -1,48 +1,41 @@
-import io
-import pandas as pd
-from fastapi import FastAPI, File, UploadFile
-from pydantic import BaseModel
+from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import FileResponse
 from model import CustomPipeline
+import pandas as pd
+from io import StringIO
+import os
 
 app = FastAPI()
 
-class ModelOutput(BaseModel):
-    model_name: str
-    accuracy: float
-    classification_report: str
-    feature_importances: dict
-    pdp_plots: list
-    shap_summary_plot: str
-    lime_explanation: str
-    surrogate_tree: str
+pipeline = CustomPipeline()
 
-@app.post("/process_dataset/", response_model=ModelOutput)
-async def process_dataset(file: UploadFile = File(...)):
-    content = await file.read()
-    data = pd.read_csv(io.BytesIO(content))
-    
-    pipeline = CustomPipeline()
+@app.post("/train_model/")
+async def train_model(file: UploadFile = File(...)):
+    contents = await file.read()
+    data = pd.read_csv(StringIO(contents.decode('utf-8')))
+
     X_train, X_test, y_train, y_test = pipeline.preprocess_data(data)
+
+    pipeline.train_model(X_train, y_train)
+
+    evaluation_results = pipeline.evaluate_model(X_test, y_test)
     
-    best_model_name, best_model = pipeline.train_model(X_train, y_train)
-    accuracy, report = pipeline.evaluate_model(best_model, X_test, y_test)
-    
-    feature_importances = pipeline.get_feature_importances(best_model)
-    pdp_plots = pipeline.generate_pdp_plots(best_model, X_test)
-    shap_summary_plot = pipeline.generate_shap_summary_plot(best_model, X_train, X_test)
-    lime_explanation = pipeline.generate_lime_explanation(best_model, X_train, X_test)
-    surrogate_tree = pipeline.generate_surrogate_tree(best_model, X_train, y_train)
-    
-    return ModelOutput(
-        model_name=best_model_name,
-        accuracy=accuracy,
-        classification_report=report,
-        feature_importances=feature_importances,
-        pdp_plots=pdp_plots,
-        shap_summary_plot=shap_summary_plot,
-        lime_explanation=lime_explanation,
-        surrogate_tree=surrogate_tree
-    )
+    model_file_path = pipeline.save_best_model()
+
+    return {
+        "message": "Model trained successfully",
+        "evaluation_results": evaluation_results,
+        "model_file": model_file_path
+    }
+
+@app.get("/download_model/")
+def download_model():
+    model_file_path = "best_model.pkl"
+    if os.path.exists(model_file_path):
+        return FileResponse(path=model_file_path, filename="best_model.pkl", media_type='application/octet-stream')
+    else:
+        return {"error": "Model file not found."}
+
 
 if __name__ == "__main__":
     import uvicorn
