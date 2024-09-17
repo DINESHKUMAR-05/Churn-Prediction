@@ -1,0 +1,11 @@
+fastapi==0.114.2
+lime==0.2.0.1
+matplotlib==3.9.2
+numpy==2.1.1
+pandas==2.2.2
+PDPbox==0.3.0
+pydantic==2.9.1
+scikit_learn==1.5.2
+seaborn==0.13.2
+shap==0.46.0
+uvicorn==0.30.6
